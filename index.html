@@ -1,0 +1,295 @@
+<html>
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            image-rendering: pixelated;
+            font-family: 'Press Start 2P', cursive;
+            -webkit-font-smoothing: none;
+        }
+        
+        body {
+            background: #222;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 20px;
+        }
+
+        .score {
+            font-size: 12px;
+        }
+
+        .title {
+            font-size: 24px;
+            color: red;
+            text-align: center;
+            margin: 20px 0;
+            text-shadow: 3px 3px 0 #000;
+        }
+
+        canvas {
+            background: #111;
+            border: 4px solid #555;
+            display: block;
+            margin: 0 auto;
+            width: 400px;
+            height: 500px;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #000;
+            border: 4px solid red;
+            padding: 20px;
+            text-align: center;
+            display: none;
+            z-index: 100;
+            width: 300px;
+        }
+
+        .game-over h2 {
+            color: red;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+
+        .restart-btn {
+            background: red;
+            color: white;
+            border: none;
+            padding: 10px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .instructions {
+            font-size: 10px;
+            color: #aaa;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="title">STACK TOWER</h1>
+    <div class="header">
+        <div class="score">SCORE: <span id="score">0</span></div>
+    </div>
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+    
+    <div class="game-over">
+        <h2>GAME OVER!</h2>
+        <div>SCORE: <span id="finalScore">0</span></div>
+        <button class="restart-btn">PLAY AGAIN</button>
+    </div>
+    
+    <div class="instructions">TAP/CLICK TO DROP BLOCK</div>
+
+    <script>
+        // Game setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const finalScoreElement = document.getElementById('finalScore');
+        const gameOverScreen = document.querySelector('.game-over');
+        const restartBtn = document.querySelector('.restart-btn');
+        
+        // Game constants
+        const BLOCK_HEIGHT = 30;
+        const INITIAL_SPEED = 2;
+        const SPEED_INCREASE = 0.3;
+        
+        // Game state
+        let score = 0;
+        let speed = INITIAL_SPEED;
+        let blocks = [];
+        let currentBlock = null;
+        let movingRight = true;
+        let gameOver = false;
+        let debris = [];
+        
+        // Initialize game
+        function init() {
+            // Create base block (wider to match new canvas size)
+            blocks = [{
+                x: 100,
+                y: canvas.height - BLOCK_HEIGHT,
+                width: 200,
+                height: BLOCK_HEIGHT,
+                color: 'red'
+            }];
+            
+            // Create first moving block
+            createNewBlock();
+            
+            score = 0;
+            speed = INITIAL_SPEED;
+            gameOver = false;
+            debris = [];
+            scoreElement.textContent = '0';
+            gameOverScreen.style.display = 'none';
+        }
+        
+        // Create new moving block
+        function createNewBlock() {
+            const lastBlock = blocks[blocks.length - 1];
+            currentBlock = {
+                x: 0,
+                y: lastBlock.y - BLOCK_HEIGHT,
+                width: lastBlock.width,
+                height: BLOCK_HEIGHT,
+                color: `hsl(${Math.random() * 360}, 70%, 60%)`,
+                moving: true
+            };
+        }
+        
+        // Draw a block
+        function drawBlock(block) {
+            ctx.fillStyle = block.color;
+            ctx.fillRect(block.x, block.y, block.width, block.height);
+            ctx.strokeStyle = 'white';
+            ctx.strokeRect(block.x, block.y, block.width, block.height);
+        }
+        
+        // Draw debris
+        function drawDebris() {
+            debris.forEach((piece, index) => {
+                ctx.fillStyle = piece.color;
+                ctx.fillRect(piece.x, piece.y, piece.width, piece.height);
+                
+                // Update position
+                piece.y += 5;
+                
+                // Remove if off screen
+                if (piece.y > canvas.height) {
+                    debris.splice(index, 1);
+                }
+            });
+        }
+        
+        // Game loop
+        function update() {
+            if (gameOver) return;
+            
+            // Clear canvas
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw all blocks
+            blocks.forEach(block => drawBlock(block));
+            
+            // Draw debris
+            drawDebris();
+            
+            // Move current block
+            if (currentBlock.moving) {
+                if (movingRight) {
+                    currentBlock.x += speed;
+                    if (currentBlock.x + currentBlock.width > canvas.width) {
+                        movingRight = false;
+                    }
+                } else {
+                    currentBlock.x -= speed;
+                    if (currentBlock.x < 0) {
+                        movingRight = true;
+                    }
+                }
+                
+                drawBlock(currentBlock);
+            }
+            
+            requestAnimationFrame(update);
+        }
+        
+        // Place current block
+        function placeBlock() {
+            if (gameOver) return;
+            
+            const lastBlock = blocks[blocks.length - 1];
+            currentBlock.moving = false;
+            
+            // Calculate overlap
+            const leftDiff = currentBlock.x - lastBlock.x;
+            const rightDiff = (currentBlock.x + currentBlock.width) - (lastBlock.x + lastBlock.width);
+            
+            // Game over if completely missed
+            if (leftDiff >= lastBlock.width || rightDiff <= -lastBlock.width) {
+                endGame();
+                return;
+            }
+            
+            // Create debris for cut-off parts
+            if (leftDiff < 0) { // Cut from left
+                debris.push({
+                    x: currentBlock.x,
+                    y: currentBlock.y,
+                    width: -leftDiff,
+                    height: BLOCK_HEIGHT,
+                    color: currentBlock.color
+                });
+                currentBlock.width += leftDiff;
+                currentBlock.x = lastBlock.x;
+            }
+            
+            if (rightDiff > 0) { // Cut from right
+                debris.push({
+                    x: lastBlock.x + lastBlock.width,
+                    y: currentBlock.y,
+                    width: rightDiff,
+                    height: BLOCK_HEIGHT,
+                    color: currentBlock.color
+                });
+                currentBlock.width -= rightDiff;
+            }
+            
+            // Add to stack
+            blocks.push(currentBlock);
+            
+            // Increase score and speed
+            score++;
+            speed += SPEED_INCREASE; // Speed increases with each block
+            scoreElement.textContent = score;
+            
+            // Create new block
+            createNewBlock();
+        }
+        
+        // End game
+        function endGame() {
+            gameOver = true;
+            finalScoreElement.textContent = score;
+            gameOverScreen.style.display = 'block';
+        }
+        
+        // Event listeners
+        canvas.addEventListener('click', placeBlock);
+        restartBtn.addEventListener('click', () => {
+            init();
+            update();
+        });
+        
+        // Start game
+        init();
+        update();
+    </script>
+</body>
+</html>
